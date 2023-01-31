@@ -31,6 +31,7 @@ from __future__ import annotations
 import re
 import struct
 import time
+from typing import Any
 import uuid
 import zlib
 from hashlib import md5
@@ -45,6 +46,8 @@ from twisted.python import log, randbytes
 from cowrie.core.config import CowrieConfig
 from cowrie.ssh_proxy import client_transport
 from cowrie.ssh_proxy.protocols import ssh
+
+from backend_pool.pool_server import POOL_OPCODE_R
 
 
 class FrontendSSHTransport(transport.SSHServerTransport, TimeoutMixin):
@@ -138,15 +141,14 @@ class FrontendSSHTransport(transport.SSHServerTransport, TimeoutMixin):
 
     def pool_connection_success(self, pool_interface):
         log.msg("Connected to backend pool")
-
         self.pool_interface = pool_interface
         self.pool_interface.set_parent(self)
 
         # now request a backend
         self.pool_interface.send_vm_request(self.peer_ip)
 
-    def received_pool_data(self, operation, status, *data):
-        if operation == b"r":
+    def received_pool_data(self, operation: bytes, status: int, *data: Any) -> None:
+        if operation == POOL_OPCODE_R:
             honey_ip = data[0]
             snapshot = data[1]
             ssh_port = data[2]
@@ -172,7 +174,7 @@ class FrontendSSHTransport(transport.SSHServerTransport, TimeoutMixin):
             CowrieConfig.getint("honeypot", "authentication_timeout", fallback=120)
         )
 
-    def connect_to_backend(self, ip, port):
+    def connect_to_backend(self, ip: str, port: int) -> None:
         # connection to the backend starts here
         client_factory = client_transport.BackendSSHFactory()
         client_factory.server = self
@@ -214,16 +216,12 @@ class FrontendSSHTransport(transport.SSHServerTransport, TimeoutMixin):
             otherVersion = self.buf.split(b"\n")[0].strip()
             log.msg(
                 eventid="cowrie.client.version",
-                version=otherVersion.decode(
-                    "utf-8", errors="backslashreplace"
-                ),
+                version=otherVersion.decode("utf-8", errors="backslashreplace"),
                 format="Remote SSH version: %(version)s",
             )
             m = re.match(rb"SSH-(\d+.\d+)-(.*)", otherVersion)
             if m is None:
-                log.msg(
-                    f"Bad protocol version identification: {repr(otherVersion)}"
-                )
+                log.msg(f"Bad protocol version identification: {repr(otherVersion)}")
                 if self.transport:
                     self.transport.write(b"Protocol mismatch.\n")
                     self.transport.loseConnection()

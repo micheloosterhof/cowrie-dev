@@ -10,6 +10,11 @@ from twisted.python import log
 
 from cowrie.core.config import CowrieConfig
 
+from backend_pool.pool_server import POOL_OPCODE_INIT
+from backend_pool.pool_server import POOL_OPCODE_F
+from backend_pool.pool_server import POOL_OPCODE_R
+from backend_pool.pool_server import POOL_OPCODE_U
+
 
 class PoolClient(Protocol):
     """
@@ -39,23 +44,28 @@ class PoolClient(Protocol):
             "proxy", "pool_share_guests", fallback=True
         )
 
-        buf = struct.pack("!cII?", b"i", max_vms, vm_unused_timeout, share_guests)
+        buf = struct.pack(
+            "!cII?", POOL_OPCODE_INIT, max_vms, vm_unused_timeout, share_guests
+        )
         self.transport.write(buf)
 
-    def send_vm_request(self, src_ip):
+    def send_vm_request(self, src_ip: str) -> None:
         fmt = f"!cH{len(src_ip)}s"
-        buf = struct.pack(fmt, b"r", len(src_ip), src_ip.encode())
-
-        self.transport.write(buf)
-
-    def send_vm_free(self, backend_dirty):
-        # free the guest, if we had any guest in this connection to begin with
-        if self.vm_id is not None:
-            op_code = b"f" if backend_dirty else b"u"
-            buf = struct.pack("!cI", op_code, self.vm_id)
+        buf = struct.pack(fmt, POOL_OPCODE_R, len(src_ip), src_ip.encode())
+        if self.transport:
             self.transport.write(buf)
 
-    def dataReceived(self, data):
+    def send_vm_free(self, backend_dirty: bool) -> None:
+        # free the guest, if we had any guest in this connection to begin with
+        if self.vm_id is not None:
+            op_code = POOL_OPCODE_F if backend_dirty else POOL_OPCODE_U
+            buf: bytes = struct.pack("!cI", op_code, self.vm_id)
+            if self.transport:
+                self.transport.write(buf)
+        else:
+            log.msg("Attempt to free unused vm")
+
+    def dataReceived(self, data: bytes) -> None:
         # only makes sense to process data if we have a parent to send it to
         if not self.parent:
             log.err("Parent not set, discarding data from pool")
@@ -63,18 +73,18 @@ class PoolClient(Protocol):
 
         response = struct.unpack("!cI", data[0:5])
 
-        res_op = response[0]
-        res_code = response[1]
+        res_op: bytes = response[0]
+        res_code: int = response[1]
 
         # shift data forward
         data = data[5:]
 
-        if res_op == b"i":
+        if res_op == POOL_OPCODE_INIT:
             # callback to the handler to signal that pool was initialised successfully,
             # so that SSH and Telnet setup can proceed
             self.parent.initialisation_response(res_code)
 
-        elif res_op == b"r":
+        elif res_op == POOL_OPCODE_R:
             if res_code != 0:
                 log.msg(
                     eventid="cowrie.pool_client",

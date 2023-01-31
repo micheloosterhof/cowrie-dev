@@ -12,6 +12,11 @@ from backend_pool.nat import NATService
 from backend_pool.pool_service import NoAvailableVMs, PoolService
 from cowrie.core.config import CowrieConfig
 
+POOL_OPCODE_INIT = b"i"
+POOL_OPCODE_R = b"r"
+POOL_OPCODE_F = b"f"
+POOL_OPCODE_U = b"u"
+
 
 class PoolServer(Protocol):
     def __init__(self, factory: PoolServerFactory) -> None:
@@ -35,7 +40,7 @@ class PoolServer(Protocol):
         ]  # yes, this needs to be done to extract the op code correctly
         response: bytes = b""
 
-        if res_op == b"i":
+        if res_op == POOL_OPCODE_INIT:
             recv = struct.unpack("!II?", data[1:])
 
             # set the pool service thread configs
@@ -50,7 +55,7 @@ class PoolServer(Protocol):
             self.factory.initialised = True
             response = struct.pack("!cI", b"i", 0)
 
-        elif res_op == b"r":
+        elif res_op == POOL_OPCODE_R:
             # receives: attacker ip (used to serve same VM to same attacker)
             # sends: status code, guest_id, guest_ip, guest's ssh and telnet port
 
@@ -128,7 +133,7 @@ class PoolServer(Protocol):
                 )
                 response = struct.pack("!cI", b"r", 1)
 
-        elif res_op == b"f":
+        elif res_op == POOL_OPCODE_F:
             # receives: guest_id
             recv = struct.unpack("!I", data[1:])
             guest_id = recv[0]
@@ -146,7 +151,7 @@ class PoolServer(Protocol):
             # free the vm
             self.factory.pool_service.free_vm(guest_id)
 
-        elif res_op == b"u":
+        elif res_op == POOL_OPCODE_U:
             # receives: guest_id
             recv = struct.unpack("!I", data[1:])
             guest_id = recv[0]
@@ -163,6 +168,9 @@ class PoolServer(Protocol):
 
             # free this connection and allow VM to be re-used
             self.factory.pool_service.reuse_vm(guest_id)
+
+        else:
+            raise ValueError(f"Unknown opcode {repr(res_op)}")
 
         if response and self.transport:
             self.transport.write(response)

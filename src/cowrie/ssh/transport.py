@@ -116,16 +116,12 @@ class HoneyPotSSHTransport(transport.SSHServerTransport, TimeoutMixin):
             otherVersion: bytes = self.buf.split(b"\n")[0].strip()
             log.msg(
                 eventid="cowrie.client.version",
-                version=otherVersion.decode(
-                    "utf-8", errors="backslashreplace"
-                ),
+                version=otherVersion.decode("utf-8", errors="backslashreplace"),
                 format="Remote SSH version: %(version)s",
             )
             m = re.match(rb"SSH-(\d+.\d+)-(.*)", otherVersion)
             if m is None:
-                log.msg(
-                    f"Bad protocol version identification: {repr(otherVersion)}"
-                )
+                log.msg(f"Bad protocol version identification: {repr(otherVersion)}")
                 # OpenSSH sending the same message
                 self.transport.write(b"Invalid SSH identification string.\n")
                 self.transport.loseConnection()

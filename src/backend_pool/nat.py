@@ -29,12 +29,12 @@ class ServerProtocol(protocol.Protocol):
         self.dst_ip = dst_ip
         self.dst_port = dst_port
         self.client_protocol = None
-        self.buffer = []
+        self.buffer: list[bytes] = []
 
     def connectionMade(self):
         reactor.connectTCP(self.dst_ip, self.dst_port, ClientFactory(self))
 
-    def dataReceived(self, data):
+    def dataReceived(self, data: bytes) -> None:
         self.buffer.append(data)
         self.sendData()
 

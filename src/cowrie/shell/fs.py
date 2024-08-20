@@ -315,7 +315,7 @@ class HoneyPotFilesystem:
             raise FileNotFound(target)
         f: Any = self.getfile(path)
         if f[A_TYPE] == T_DIR:
-            raise IsADirectoryError
+            raise IsADirectoryError(target)
         if f[A_TYPE] == T_FILE and f[A_REALFILE]:
             return Path(f[A_REALFILE]).read_bytes()
         if f[A_TYPE] == T_FILE and f[A_SIZE] == 0:
@@ -346,7 +346,7 @@ class HoneyPotFilesystem:
         _path: str = os.path.dirname(path)
 
         if any([_path.startswith(_p) for _p in SPECIAL_PATHS]):
-            raise PermissionDenied
+            raise PermissionDenied(path)
 
         _dir = self.get_path(_path)
         outfile: str = os.path.basename(path)

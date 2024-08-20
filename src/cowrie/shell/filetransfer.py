@@ -178,7 +178,7 @@ class SFTPServerForCowrieUser:
         return {}
 
     def openFile(self, filename, flags, attrs):
-        log.msg(f"SFTP openFile: {filename}")
+        log.msg(f"SFTP openFile: {filename} {flags}")
         return CowrieSFTPFile(self, self._absPath(filename), flags, attrs)
 
     def removeFile(self, filename):

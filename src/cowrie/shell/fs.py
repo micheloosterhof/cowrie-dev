@@ -231,7 +231,7 @@ class HoneyPotFilesystem:
                     ok = True
                     break
             if not ok:
-                raise FileNotFound
+                raise FileNotFound(path)
         return cwd[A_CONTENTS]
 
     def exists(self, path: str) -> bool:
@@ -312,7 +312,7 @@ class HoneyPotFilesystem:
         """
         path: str = self.resolve_path(target, os.path.dirname(target))
         if not path or not self.exists(path):
-            raise FileNotFound
+            raise FileNotFound(target)
         f: Any = self.getfile(path)
         if f[A_TYPE] == T_DIR:
             raise IsADirectoryError

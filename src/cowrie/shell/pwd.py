@@ -140,7 +140,7 @@ class Passwd:
         e["pw_name"] = name
         e["pw_passwd"] = "x"
         e["pw_gecos"] = 0
-        e["pw_dir"] = "/home/" + name
+        e["pw_dir"] = "/tmp"
         e["pw_shell"] = "/bin/bash"
         e["pw_uid"] = randint(1500, 10000)
         e["pw_gid"] = e["pw_uid"]

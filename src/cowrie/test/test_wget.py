@@ -187,33 +187,40 @@ class WgetArtifactCleanupTests(unittest.TestCase):
 
 class WgetOutboundBindTests(unittest.TestCase):
     """Downloads must bind to the configured out_addr so they do not leak the
-    honeypot's real interface IP (issue #752)."""
+    honeypot's real interface IP (issues #752, #754)."""
 
     def tearDown(self) -> None:
         CowrieConfig.remove_option("honeypot", "out_addr")
 
-    def _captured_agent(self) -> Any:
-        """Run httpDownload with treq.get stubbed and return the agent it used.
+    def _captured_call(self) -> dict[str, Any]:
+        """Run httpDownload with treq.get stubbed and return the captured call.
         The agent's endpoint factory carries the source address it binds to."""
         cmd = Command_wget.__new__(Command_wget)
         captured: dict[str, Any] = {}
 
         def fake_get(url: str, agent: Any = None, **kwargs: Any) -> Any:
             captured["agent"] = agent
+            captured["kwargs"] = kwargs
             return defer.succeed(None)
 
         with mock.patch("cowrie.commands.wget.treq.get", fake_get):
             cmd.httpDownload("http://198.51.100.1/x")
-        return captured["agent"]
+        return captured
 
     def test_http_download_binds_agent_to_out_addr(self) -> None:
         CowrieConfig.set("honeypot", "out_addr", "127.0.0.1")
-        agent = self._captured_agent()
+        agent = self._captured_call()["agent"]
         self.assertEqual(agent._endpointFactory._bindAddress, ("127.0.0.1", 0))
 
     def test_http_download_default_bind_is_wildcard(self) -> None:
-        agent = self._captured_agent()
+        agent = self._captured_call()["agent"]
         self.assertEqual(agent._endpointFactory._bindAddress, ("0.0.0.0", 0))
+
+    def test_http_download_follows_redirects_through_bound_agent(self) -> None:
+        # treq wraps the given agent in a RedirectAgent, so a redirect is
+        # fetched through the same bound agent -- the redirect hop cannot fall
+        # back to the default interface and leak the real IP (issue #754).
+        self.assertTrue(self._captured_call()["kwargs"]["allow_redirects"])
 
     def test_ftp_download_binds_to_out_addr(self) -> None:
         CowrieConfig.set("honeypot", "out_addr", "127.0.0.1")

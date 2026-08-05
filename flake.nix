@@ -122,7 +122,7 @@
               machine.wait_for_unit("cowrie.service")
               machine.wait_for_open_port(2222)
               banner = machine.succeed(
-                  "timeout 10 bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222; head -c 64 <&3'"
+                  "timeout 10 bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222; head -n1 <&3'"
               )
               assert "SSH-2.0" in banner, f"unexpected banner: {banner!r}"
             '';

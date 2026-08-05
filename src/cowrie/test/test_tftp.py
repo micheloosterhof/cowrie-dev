@@ -226,7 +226,7 @@ class ShellTftpAsyncTests(unittest.TestCase):
         )
         self.assertNotIn(b"tftp: TFTP Error", self.tr.value())
 
-    def test_unreachable_host_reports_timeout(self) -> None:
+    def test_unreachable_host_fails_transfer(self) -> None:
         """An unreachable target fails the transfer instead of hanging."""
         # Shorten the retransmission schedule so the failure lands promptly.
         with (
@@ -239,7 +239,9 @@ class ShellTftpAsyncTests(unittest.TestCase):
                 pump(lambda: self.failed()), "unreachable transfer never failed"
             )
 
-        self.assertIn("timed out", self.failed()[0]["error"].lower())
+        # Dropped packets surface as a retry timeout; a sandboxed build
+        # environment with no routes fails the send with ENETUNREACH.
+        self.assertRegex(self.failed()[0]["error"].lower(), r"timed out|unreachable")
         self.assertEqual(self.downloaded(), [])
         self.assertIn(PROMPT, self.tr.value())
 

@@ -175,9 +175,16 @@ def cowrie_start(args: list[str]) -> NoReturn:
     if authbind_enabled:
         twisted_args.insert(0, "--deep")
         twisted_args.insert(0, "authbind")
+        os.execvp(twisted_args[0], twisted_args)
 
-    # Execute twistd
-    os.execvp(twisted_args[0], twisted_args)
+    # Run twistd in-process so it shares our interpreter and sys.path; an
+    # external twistd found on PATH may belong to a different Python
+    # environment that cannot import cowrie or find its twisted plugin.
+    sys.argv = twisted_args
+    from twisted.scripts.twistd import run
+
+    run()
+    sys.exit(0)
 
 
 def cowrie_stop() -> None:

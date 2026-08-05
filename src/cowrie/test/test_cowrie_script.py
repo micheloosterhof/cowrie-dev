@@ -11,9 +11,11 @@ import contextlib
 import io
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cowrie.scripts import cowrie as cowrie_script
 
@@ -59,6 +61,53 @@ class CheckInitializedTests(unittest.TestCase):
         self.assertIn("not initialized", stderr.getvalue())
 
 
+class CowrieStartTests(unittest.TestCase):
+    """cowrie start runs twistd in-process so it shares our sys.path.
+
+    An external twistd found on PATH may belong to a different Python
+    environment that cannot import the cowrie package or find its twisted
+    plugin.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
+        self._prior_cwd = os.getcwd()
+        os.chdir(self.tmpdir)
+        self.addCleanup(os.chdir, self._prior_cwd)
+        self._prior_argv = sys.argv[:]
+        self.addCleanup(lambda: setattr(sys, "argv", self._prior_argv))
+        (Path(self.tmpdir) / "etc").mkdir()
+        (Path(self.tmpdir) / "etc" / "cowrie.cfg").write_text("")
+
+    def test_stdout_mode_runs_twistd_in_process(self) -> None:
+        with (
+            mock.patch.dict(
+                os.environ, {"COWRIE_STDOUT": "yes", "AUTHBIND_ENABLED": "no"}
+            ),
+            mock.patch("os.execvp") as execvp,
+            mock.patch("twisted.scripts.twistd.run") as run,
+            contextlib.redirect_stdout(io.StringIO()),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            cowrie_script.cowrie_start([])
+
+        self.assertEqual(ctx.exception.code, 0)
+        execvp.assert_not_called()
+        run.assert_called_once_with()
+        self.assertEqual(
+            sys.argv,
+            [
+                "twistd",
+                "--umask=0022",
+                "-n",
+                "--logger",
+                "cowrie.python.logfile.stdoutLogger",
+                "cowrie",
+            ],
+        )
+
+
 class CowrieInitTests(unittest.TestCase):
     """cowrie init materialises ./etc/cowrie.cfg from the bundled template."""
 
@@ -79,9 +128,7 @@ class CowrieInitTests(unittest.TestCase):
         # Bytes match the bundled template.
         from cowrie.core.resources import read_data_bytes
 
-        self.assertEqual(
-            target.read_bytes(), read_data_bytes("etc", "cowrie.cfg.dist")
-        )
+        self.assertEqual(target.read_bytes(), read_data_bytes("etc", "cowrie.cfg.dist"))
 
     def test_satisfies_init_marker_after_running(self) -> None:
         with contextlib.redirect_stdout(io.StringIO()):
@@ -99,9 +146,7 @@ class CowrieInitTests(unittest.TestCase):
             "var/lib/cowrie/tty",
             "var/run",
         ):
-            self.assertTrue(
-                (Path(self.tmpdir) / sub).is_dir(), f"{sub} not created"
-            )
+            self.assertTrue((Path(self.tmpdir) / sub).is_dir(), f"{sub} not created")
 
     def test_refuses_to_overwrite_existing(self) -> None:
         (Path(self.tmpdir) / "etc").mkdir()

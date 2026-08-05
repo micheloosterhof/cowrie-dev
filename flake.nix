@@ -100,5 +100,34 @@
           program = nixpkgs.lib.getExe self.packages.${system}.cowrie;
         };
       });
+
+      nixosModules = {
+        default = self.nixosModules.cowrie;
+        cowrie = import ./nix/module.nix { inherit self; };
+      };
+
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+        in
+        nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
+          nixos-module = pkgs.testers.runNixOSTest {
+            name = "cowrie-nixos-module";
+            nodes.machine = {
+              imports = [ self.nixosModules.cowrie ];
+              services.cowrie.enable = true;
+            };
+            testScript = ''
+              machine.wait_for_unit("cowrie.service")
+              machine.wait_for_open_port(2222)
+              banner = machine.succeed(
+                  "timeout 10 bash -c 'exec 3<>/dev/tcp/127.0.0.1/2222; head -c 64 <&3'"
+              )
+              assert "SSH-2.0" in banner, f"unexpected banner: {banner!r}"
+            '';
+          };
+        }
+      );
     };
 }
